@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Launch Your Free Website</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-radius: 8px; }
+        input, button { width: 100%; padding: 12px; margin: 10px 0; box-sizing: border-box; }
+        button { background: #238636; color: white; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; }
+        #status { font-weight: bold; color: #555; }
+    </style>
+</head>
+<body>
+    <h2>True Multi-Page Web Host</h2>
+    
+    <label>Give your website a unique name:</label>
+    <input type="text" id="repoName" placeholder="e.g., my-portfolio-site">
+
+    <label>Select your files (Hold Ctrl/Cmd to select multiple, must include index.html):</label>
+    <input type="file" id="filePicker" multiple>
+
+    <button onclick="startDeployment()">Deploy Website</button>
+    <div id="status"></div>
+
+    <script>
+        // CONFIGURATION: Replace these with your actual platform details
+        const GITHUB_USERNAME = "YOUR_PLATFORM_GITHUB_USERNAME";
+        const GITHUB_TOKEN = "YOUR_FINE_GRAINED_ACCESS_TOKEN";
+
+        async function startDeployment() {
+            const rawName = document.getElementById('repoName').value.trim();
+            const repoName = rawName.toLowerCase().replace(/[^a-z0-9-_]/g, '-'); // Clean URL formatting
+            const files = document.getElementById('filePicker').files;
+            const statusDiv = document.getElementById('status');
+
+            if (!repoName || files.length === 0) {
+                statusDiv.innerText = "❌ Please enter a name and pick files.";
+                return;
+            }
+
+            statusDiv.innerText = "🏗️ Creating cloud storage space...";
+
+            try {
+                // 1. Create a new repository for this specific user's site
+                const repoRes = await fetch(`https://github.com`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `token ${GITHUB_TOKEN}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: repoName, auto_init: false })
+                });
+
+                if (!repoRes.ok) throw new Error("Website name already exists!");
+
+                statusDiv.innerText = "📤 Uploading actual files to server...";
+
+                // 2. Loop through all chosen files and upload them to the new repo
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const contentBase64 = await toBase64(file);
+                    
+                    await fetch(`https://github.com{GITHUB_USERNAME}/${repoName}/contents/${file.name}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${GITHUB_TOKEN}`,
+                            'Accept': 'application/vnd.github.v3+json',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `Add ${file.name}`,
+                            content: contentBase64
+                        })
+                    });
+                }
+
+                statusDiv.innerText = "⚙️ Turning on public hosting features...";
+
+                // 3. Request GitHub to configure and enable GitHub Pages for this repository
+                await fetch(`https://github.com{GITHUB_USERNAME}/${repoName}/pages`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `token ${GITHUB_TOKEN}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        source: { branch: 'main', path: '/' }
+                    })
+                });
+
+                // 4. Generate the final live, working standard web URL
+                const liveUrl = `https://${GITHUB_USERNAME}.github.io/${repoName}/`;
+                statusDiv.innerHTML = `🎉 <strong>Success!</strong> Your site is live globally at:<br><a href="${liveUrl}" target="_blank">${liveUrl}</a><br><small>(Note: GitHub can take up to 60 seconds to process the first load)</small>`;
+
+            } catch (err) {
+                statusDiv.innerText = `❌ Error: ${err.message}`;
+            }
+        }
+
+        // Helper function to read file binaries into clean base64 format for GitHub's API
+        function toBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = error => reject(error);
+            });
+        }
+    </script>
+</body>
+</html>
